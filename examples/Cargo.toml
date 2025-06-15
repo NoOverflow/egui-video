@@ -1,0 +1,13 @@
+[package]
+name = "example"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.31.1"
+egui = "0.31.1"
+egui-video = {path=".."}
+rfd = "0.15.3"
+[[bin]]
+name = "example"
+path = "main.rs"

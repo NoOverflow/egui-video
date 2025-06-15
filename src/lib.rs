@@ -15,7 +15,7 @@ use egui::epaint::Shadow;
 use egui::load::SizedTexture;
 
 use egui::{
-    vec2, Align2, Color32, ColorImage, FontId, Image, Pos2, Rect, Response, Rounding, Sense,
+    vec2, Align2, Color32, ColorImage, CornerRadius, FontId, Image, Pos2, Rect, Response, Sense,
     Spinner, TextureHandle, TextureOptions, Ui, Vec2,
 };
 use ffmpeg::error::EAGAIN;
@@ -27,7 +27,7 @@ use ffmpeg::media::Type;
 use ffmpeg::software::scaling::{context::Context, flag::Flags};
 use ffmpeg::util::frame::video::Video;
 use ffmpeg::{rescale, Packet, Rational, Rescale};
-use ffmpeg::{software, ChannelLayout};
+use ffmpeg::{software, ChannelLayoutMask};
 use parking_lot::Mutex;
 use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::wrap::caching::Caching;
@@ -546,7 +546,8 @@ impl Player {
                     .unwrap_or_else(|| {
                         //TODO incorporate left/right margin
                         let mut center_bottom = original_rect_center_bottom;
-                        center_bottom.y = center_bottom.y.min(last_bottom) - subtitle.margin.bottom;
+                        center_bottom.y =
+                            center_bottom.y.min(last_bottom) - subtitle.margin.bottom as f32;
                         transform.transform_pos(center_bottom)
                     }),
                 subtitle.alignment,
@@ -624,14 +625,14 @@ impl Player {
 
         if currently_seeking {
             let seek_indicator_shadow = Shadow {
-                offset: vec2(10.0, 20.0),
-                blur: 15.0,
-                spread: 0.0,
+                offset: [10, 20],
+                blur: 15,
+                spread: 0,
                 color: Color32::from_black_alpha(96).linear_multiply(seek_indicator_anim),
             };
             let spinner_size = 20. * seek_indicator_anim;
             ui.painter()
-                .add(seek_indicator_shadow.as_shape(frame_response.rect, Rounding::ZERO));
+                .add(seek_indicator_shadow.as_shape(frame_response.rect, CornerRadius::ZERO));
             ui.put(
                 Rect::from_center_size(frame_response.rect.center(), Vec2::splat(spinner_size)),
                 Spinner::new().size(spinner_size),
@@ -708,9 +709,9 @@ impl Player {
         };
 
         let shadow = Shadow {
-            offset: vec2(10.0, 20.0),
-            blur: 15.0,
-            spread: 0.0,
+            offset: [10, 20],
+            blur: 15,
+            spread: 0,
             color: Color32::from_black_alpha(25).linear_multiply(seekbar_anim_frac),
         };
 
@@ -721,15 +722,15 @@ impl Player {
         let seekbar_color = Color32::WHITE.linear_multiply(seekbar_anim_frac);
 
         ui.painter()
-            .add(shadow.as_shape(shadow_rect, Rounding::ZERO));
+            .add(shadow.as_shape(shadow_rect, CornerRadius::ZERO));
 
         ui.painter().rect_filled(
             fullseekbar_rect,
-            Rounding::ZERO,
+            CornerRadius::ZERO,
             fullseekbar_color.linear_multiply(0.5),
         );
         ui.painter()
-            .rect_filled(seekbar_rect, Rounding::ZERO, seekbar_color);
+            .rect_filled(seekbar_rect, CornerRadius::ZERO, seekbar_color);
         ui.painter().text(
             pause_icon_pos,
             Align2::LEFT_BOTTOM,
@@ -814,7 +815,7 @@ impl Player {
                     Color32::from_black_alpha(contraster_alpha).linear_multiply(stream_anim_frac);
 
                 ui.painter()
-                    .rect_filled(background_rect, Rounding::same(5.), background_color);
+                    .rect_filled(background_rect, CornerRadius::same(5), background_color);
 
                 if ui.rect_contains_pointer(background_rect.expand(5.)) {
                     stream_info_hovered = true;
@@ -918,11 +919,14 @@ impl Player {
             sound_bar_rect
                 .set_top(sound_bar_rect.bottom() - audio_volume_frac * sound_bar_rect.height());
 
-            ui.painter()
-                .rect_filled(sound_slider_rect, Rounding::same(5.), sound_slider_bg_color);
+            ui.painter().rect_filled(
+                sound_slider_rect,
+                CornerRadius::same(5),
+                sound_slider_bg_color,
+            );
 
             ui.painter()
-                .rect_filled(sound_bar_rect, Rounding::same(5.), sound_bar_color);
+                .rect_filled(sound_bar_rect, CornerRadius::same(5), sound_bar_color);
             let sound_slider_resp = ui.interact(
                 sound_slider_rect,
                 frame_response.id.with("sound_slider_sense"),
@@ -966,12 +970,12 @@ impl Player {
 
             let audio_sample_buffer = HeapRb::<f32>::new(audio_device.0.spec().size as usize);
             let (audio_sample_producer, audio_sample_consumer) = audio_sample_buffer.split();
-            let audio_resampler = ffmpeg::software::resampling::context::Context::get2(
+            let audio_resampler = ffmpeg::software::resampling::context::Context::get(
                 audio_decoder.format(),
-                audio_decoder.ch_layout(),
+                audio_decoder.channel_layout(),
                 audio_decoder.rate(),
                 audio_device.0.spec().format.to_sample(),
-                ChannelLayout::STEREO,
+                ChannelLayoutMask::STEREO,
                 audio_device.0.spec().freq as u32,
             )?;
 
@@ -1469,12 +1473,12 @@ impl Streamer for AudioStreamer {
             .unwrap()
             .audio()
             .unwrap();
-        let new_resampler = ffmpeg::software::resampling::context::Context::get2(
+        let new_resampler = ffmpeg::software::resampling::context::Context::get(
             new_decoder.format(),
-            new_decoder.ch_layout(),
+            new_decoder.channel_layout(),
             new_decoder.rate(),
             self.resampler.output().format,
-            ChannelLayout::STEREO,
+            ChannelLayoutMask::STEREO,
             self.resampler.output().rate,
         )
         .unwrap();
@@ -1668,7 +1672,7 @@ fn packed<T: ffmpeg::frame::audio::Sample>(frame: &ffmpeg::frame::Audio) -> &[T]
 
     if !<T as ffmpeg::frame::audio::Sample>::is_valid(
         frame.format(),
-        frame.ch_layout().channels() as u16,
+        frame.channel_layout().channels() as u16,
     ) {
         panic!("unsupported type");
     }
@@ -1676,7 +1680,7 @@ fn packed<T: ffmpeg::frame::audio::Sample>(frame: &ffmpeg::frame::Audio) -> &[T]
     unsafe {
         std::slice::from_raw_parts(
             (*frame.as_ptr()).data[0] as *const T,
-            frame.samples() * frame.ch_layout().channels() as usize,
+            frame.samples() * frame.channel_layout().channels() as usize,
         )
     }
 }

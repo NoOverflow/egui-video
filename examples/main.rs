@@ -9,7 +9,7 @@ fn main() {
     );
 }
 struct App {
-    audio_device: AudioDevice,
+    audio_device: Option<AudioDevice>,
     player: Option<Player>,
 
     media_path: String,
@@ -20,7 +20,7 @@ struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            audio_device: AudioDevice::new().unwrap(),
+            audio_device: None,
             media_path: String::new(),
             stream_size_scale: 1.,
             seek_frac: 0.,
@@ -32,14 +32,12 @@ impl Default for App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint();
+
         CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.add_enabled_ui(!self.media_path.is_empty(), |ui| {
                     if ui.button("load").clicked() {
-                        match Player::new(ctx, &self.media_path.replace("\"", "")).and_then(|p| {
-                            p.with_audio(&mut self.audio_device)
-                                .and_then(|p| p.with_subtitles())
-                        }) {
+                        match Player::new(ctx, &self.media_path.replace("\"", "")) {
                             Ok(player) => {
                                 self.player = Some(player);
                             }
@@ -57,7 +55,7 @@ impl eframe::App for App {
                     [ui.available_width(), ui.available_height()],
                     TextEdit::singleline(&mut self.media_path)
                         .hint_text("click to set path")
-                        .interactive(false),
+                        .interactive(true),
                 );
 
                 if ui
